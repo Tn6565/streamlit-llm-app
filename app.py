@@ -1,52 +1,70 @@
+import streamlit as st
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
 from dotenv import load_dotenv
+import os
+
+# 環境変数の読み込み
 load_dotenv()
 
-import os
-import streamlit as st
-from openai import OpenAI
+# 関数：専門家の種類と入力テキストを使ってLLMから回答を得る
+def get_expert_response(user_input: str, expert_type: str) -> str:
+    if expert_type == "医療の専門家":
+        system_prompt = "あなたは経験豊富な医療の専門家です。専門的かつ分かりやすく説明してください。"
+    elif expert_type == "法律の専門家":
+        system_prompt = "あなたは信頼できる法律の専門家です。分かりやすく法的な観点から回答してください。"
+    else:
+        system_prompt = "あなたは有能な一般知識の専門家です。親切かつ論理的に回答してください。"
 
-# OpenAIクライアントの初期化
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_input)
+    ]
 
-# タイトルと説明
-st.title("サンプルアプリ②: 少し複雑なWebアプリ")
+    # OpenAI API キーは .env ファイルで読み込まれることを前提とする
+    openai_api_key = os.getenv("OPENAI_API_KEY")
 
-st.write("##### 動作モード1: 健康アドバイザー")
-st.write("健康に関するテキストを入力すると、健康アドバイザーがアドバイスを提供します。")
-st.write("##### 動作モード2: スポーツインストラクター")
-st.write("スポーツに関するテキストを入力すると、スポーツインストラクターがアドバイスを提供します。")
+    if not openai_api_key:
+        return "OpenAI APIキーが見つかりません。環境変数 OPENAI_API_KEY を設定してください。"
 
-# モード選択
-selected_item = st.radio(
-    "動作モードを選択してください。",
-    ["健康アドバイザー", "スポーツインストラクター"]
-)
+    try:
+        llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo", openai_api_key=openai_api_key)
+        response = llm(messages)
+        return response.content
+    except Exception as e:
+        return f"AIの応答中にエラーが発生しました: {str(e)}"
+
+# --- Streamlit UI構築 ---
+
+st.set_page_config(page_title="専門家に相談するAIアプリ", layout="centered")
+
+st.title("サンプルアプリ③: 専門家AI相談窓口")
+st.write("このアプリでは、入力したテキストに対して、選択した専門家の視点からLLMが回答します。")
+st.write("以下の手順に従ってください：")
+st.markdown("""
+1. 相談したい内容をテキスト入力欄に記入します  
+2. 回答してほしい専門家の種類を選びます  
+3. 「実行」ボタンを押すと、LLMが回答を表示します
+""")
 
 st.divider()
 
-# 入力フォーム
-user_input = st.text_area("質問を入力してください。", height=100)
+# 専門家の種類を選択
+expert_type = st.radio(
+    "回答してほしい専門家を選んでください：",
+    ["医療の専門家", "法律の専門家", "一般知識の専門家"]
+)
 
-# モードごとの system メッセージ
-role_messages = {
-    "健康アドバイザー": "あなたは健康に関するアドバイザーです。安全で信頼できる健康アドバイスを提供してください。",
-    "スポーツインストラクター": "あなたはプロのスポーツインストラクターです。運動やトレーニングについて、実践的かつ安全なアドバイスを提供してください。"
-}
+# ユーザー入力
+user_input = st.text_area("相談内容を入力してください：", height=150)
 
 # 実行ボタン
-if st.button("アドバイスをもらう"):
+if st.button("実行"):
     if user_input.strip() == "":
-        st.warning("質問を入力してください。")
+        st.error("テキストを入力してください。")
     else:
-        with st.spinner("アドバイスを生成中..."):
-            completion = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": role_messages[selected_item]},
-                    {"role": "user", "content": user_input}
-                ],
-                temperature=0.5
-            )
-            response = completion.choices[0].message.content
-            st.success("アドバイス:")
-            st.markdown(response)
+        with st.spinner("AIが考え中です..."):
+            response = get_expert_response(user_input, expert_type)
+        st.success("AIの回答：")
+        st.write(response)
+
